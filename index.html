@@ -1,0 +1,570 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LoL チャンピオン対策データベース</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Inter', sans-serif; }
+        .lane-button.active {
+            @apply bg-red-600 text-white shadow-lg;
+        }
+        /* Custom scrollbar for champion list */
+        #champion-list::-webkit-scrollbar {
+            width: 8px;
+        }
+        #champion-list::-webkit-scrollbar-thumb {
+            background-color: #f87171; /* Red-400 */
+            border-radius: 4px;
+        }
+        #champion-list::-webkit-scrollbar-track {
+            background: #fecaca; /* Red-200 */
+        }
+        /* Style for strategy sections */
+        .strategy-section {
+            padding: 1rem;
+            border-radius: 0.75rem; /* rounded-xl */
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -2px rgba(0, 0, 0, 0.1);
+        }
+        .section-title {
+            font-size: 1.25rem; /* text-xl */
+            font-weight: 700; /* font-bold */
+            margin-bottom: 0.5rem;
+            padding-bottom: 0.25rem;
+            border-bottom-width: 2px;
+        }
+        /* Style for list formatting in strategy content */
+        .strategy-content ul, .strategy-content ol {
+            list-style: disc;
+            margin-left: 1.5rem;
+            padding-left: 0;
+        }
+        .strategy-content li {
+            margin-bottom: 0.5rem;
+        }
+        /* Ensure pre-wrap handles list formatting outputted by the model */
+        .strategy-content {
+            white-space: pre-wrap;
+        }
+    </style>
+    <script type="module">
+        // Firebase and Firestore imports (Mandatory setup)
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, setLogLevel } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        // Global Firebase variables setup (Mandatory)
+        let app, db, auth;
+        let userId = 'anonymous'; // Default to anonymous
+
+        // チャンピオンリスト (最新のチャンピオンまで網羅し、重複を排除)
+        const allChampions = [
+            // Top Lane
+            { name: "Aatrox", jpName: "アーゴット", role: "Top" },
+            { name: "Camille", jpName: "カミール", role: "Top" },
+            { name: "Cho'Gath", jpName: "チョ＝ガス", role: "Top" },
+            { name: "Darius", jpName: "ダリウス", role: "Top" },
+            { name: "Dr. Mundo", jpName: "ドクター・ムンド", role: "Top" },
+            { name: "Fiora", jpName: "フィオラ", role: "Top" },
+            { name: "Gangplank", jpName: "ガングプランク", role: "Top" },
+            { name: "Garen", jpName: "ガレン", role: "Top" },
+            { name: "Gnar", jpName: "ナー", role: "Top" },
+            { name: "Gragas", jpName: "グラガス", role: "Top" },
+            { name: "Gwen", jpName: "グウェン", role: "Top" },
+            { name: "Heimerdinger", jpName: "ハイマーディンガー", role: "Top" },
+            { name: "Illaoi", jpName: "イラオイ", role: "Top" },
+            { name: "Irelia", jpName: "イラオイ", role: "Top" },
+            { name: "Jax", jpName: "ジャックス", role: "Top" },
+            { name: "Jayce", jpName: "ジェイス", role: "Top" },
+            { name: "K'Sante", jpName: "ク＝サンテ", role: "Top" },
+            { name: "Kayle", jpName: "ケイル", role: "Top" },
+            { name: "Kennen", jpName: "ケネン", role: "Top" },
+            { name: "Kled", jpName: "クレッド", role: "Top" },
+            { name: "Lillia", jpName: "リリア", role: "Top" },
+            { name: "Lissandra", jpName: "リサンドラ", role: "Top" },
+            { name: "Malphite", jpName: "マルファイト", role: "Top" },
+            { name: "Maokai", jpName: "マオカイ", role: "Top" },
+            { name: "Mordekaiser", jpName: "モルデカイザー", role: "Top" },
+            { name: "Nasus", jpName: "ナサス", role: "Top" },
+            { name: "Olaf", jpName: "オラフ", role: "Top" },
+            { name: "Ornn", jpName: "オーン", role: "Top" },
+            { name: "Poppy", jpName: "ポッピー", role: "Top" },
+            { name: "Quinn", jpName: "クイン", role: "Top" },
+            { name: "Renekton", jpName: "レネクトン", role: "Top" },
+            { name: "Riven", jpName: "リヴェン", role: "Top" },
+            { name: "Rumble", jpName: "ランブル", role: "Top" },
+            { name: "Ryze", jpName: "ライズ", role: "Top" },
+            { name: "Sett", jpName: "セト", role: "Top" },
+            { name: "Shen", jpName: "シェン", role: "Top" },
+            { name: "Singed", jpName: "シンジド", role: "Top" },
+            { name: "Sion", jpName: "サイオン", role: "Top" },
+            { name: "Tahm Kench", jpName: "タム・ケンチ", role: "Top" },
+            { name: "Teemo", jpName: "ティーモ", role: "Top" },
+            { name: "Trundle", jpName: "トランドル", role: "Top" },
+            { name: "Tryndamere", jpName: "トリンダメア", role: "Top" },
+            { name: "Urgot", jpName: "アーゴット", role: "Top" },
+            { name: "Vayne", jpName: "ヴェイン", role: "Top" },
+            { name: "Volibear", jpName: "ボリベア", role: "Top" },
+            { name: "Yorick", jpName: "ヨリック", role: "Top" },
+            { name: "Zac", jpName: "ザック", role: "Top" },
+
+            // Jungle
+            { name: "Amumu", jpName: "アムム", role: "Jungle" },
+            { name: "Bel'Veth", jpName: "ベル＝ヴェス", role: "Jungle" },
+            { name: "Briar", jpName: "ブライア", role: "Jungle" },
+            { name: "Diana", jpName: "ダイアナ", role: "Jungle" },
+            { name: "Ekko", jpName: "エコー", role: "Jungle" },
+            { name: "Elise", jpName: "エリス", role: "Jungle" },
+            { name: "Evelynn", jpName: "イブリン", role: "Jungle" },
+            { name: "Fiddlesticks", jpName: "フィドルスティックス", role: "Jungle" },
+            { name: "Graves", jpName: "グレイブス", role: "Jungle" },
+            { name: "Hecarim", jpName: "ヘカリム", role: "Jungle" },
+            { name: "Ivern", jpName: "アイバーン", role: "Jungle" },
+            { name: "Jarvan IV", jpName: "ジャーヴァンIV", role: "Jungle" },
+            { name: "Karthus", jpName: "カーサス", role: "Jungle" },
+            { name: "Kayn", jpName: "ケイン", role: "Jungle" },
+            { name: "Kha'Zix", jpName: "カ＝ジックス", role: "Jungle" },
+            { name: "Kindred", jpName: "キンドレッド", role: "Jungle" },
+            { name: "Lee Sin", jpName: "リー・シン", role: "Jungle" },
+            { name: "Master Yi", jpName: "マスター・イー", role: "Jungle" },
+            { name: "Naafiri", jpName: "ナーフィーリ", role: "Jungle" },
+            { name: "Nidalee", jpName: "ニダリー", role: "Jungle" },
+            { name: "Nocturne", jpName: "ノクターン", role: "Jungle" },
+            { name: "Nunu & Willump", jpName: "ヌヌ＆ウィルンプ", role: "Jungle" },
+            { name: "Rammus", jpName: "ラムス", role: "Jungle" },
+            { name: "Rek'Sai", jpName: "レク＝サイ", role: "Jungle" },
+            { name: "Rengar", jpName: "レンガー", role: "Jungle" },
+            { name: "Sejuani", jpName: "セジュアニ", role: "Jungle" },
+            { name: "Shaco", jpName: "シャコ", role: "Jungle" },
+            { name: "Shyvana", jpName: "シャイヴァーナ", role: "Jungle" },
+            { name: "Skarner", jpName: "スカーナー", role: "Jungle" },
+            { name: "Taliyah", jpName: "タリヤ", role: "Jungle" },
+            { name: "Twitch", jpName: "トゥイッチ", role: "Jungle" },
+            { name: "Udyr", jpName: "ウディア", role: "Jungle" },
+            { name: "Viego", jpName: "ヴィエゴ", role: "Jungle" },
+            { name: "Vi", jpName: "ヴァイ", role: "Jungle" },
+            { name: "Warwick", jpName: "ワーウィック", role: "Jungle" },
+            { name: "Wukong", jpName: "ウーコン", role: "Jungle" },
+            { name: "Xin Zhao", jpName: "シン・ジャオ", role: "Jungle" },
+
+            // Mid Lane
+            { name: "Ahri", jpName: "アーリ", role: "Mid" },
+            { name: "Akali", jpName: "アカリ", role: "Mid" },
+            { name: "Akshan", jpName: "アクシャン", role: "Mid" },
+            { name: "Anivia", jpName: "アニヴィア", role: "Mid" },
+            { name: "Annie", jpName: "アニー", role: "Mid" },
+            { name: "Aurelion Sol", jpName: "オーレリオン・ソル", role: "Mid" },
+            { name: "Azir", jpName: "アジール", role: "Mid" },
+            { name: "Brand", jpName: "ブランド", role: "Mid" },
+            { name: "Cassiopeia", jpName: "カシオペア", role: "Mid" },
+            { name: "Corki", jpName: "コーキ", role: "Mid" },
+            { name: "Fizz", jpName: "フィズ", role: "Mid" },
+            { name: "Galio", jpName: "ガリオ", role: "Mid" },
+            { name: "Hwei", jpName: "フェイ", role: "Mid" },
+            { name: "Kassadin", jpName: "カサディン", role: "Mid" },
+            { name: "Katarina", jpName: "カタリナ", role: "Mid" },
+            { name: "LeBlanc", jpName: "ルブラン", role: "Mid" },
+            { name: "Lux", jpName: "ラックス", role: "Mid" },
+            { name: "Malzahar", jpName: "マルザハール", role: "Mid" },
+            { name: "Neeko", jpName: "ニーコ", role: "Mid" },
+            { name: "Orianna", jpName: "オリアナ", role: "Mid" },
+            { name: "Qiyana", jpName: "キヤナ", role: "Mid" },
+            { name: "Sylas", jpName: "サイラス", role: "Mid" },
+            { name: "Syndra", jpName: "シンドラ", role: "Mid" },
+            { name: "Talon", jpName: "タロン", role: "Mid" },
+            { name: "Twisted Fate", jpName: "ツイステッド・フェイト", role: "Mid" },
+            { name: "Veigar", jpName: "ベイガー", role: "Mid" },
+            { name: "Vel'Koz", jpName: "ベル＝コズ", role: "Mid" },
+            { name: "Vex", jpName: "ヴェックス", role: "Mid" },
+            { name: "Viktor", jpName: "ヴィクター", role: "Mid" },
+            { name: "Vladimir", jpName: "ブラッドミア", role: "Mid" },
+            { name: "Xerath", jpName: "ゼラス", role: "Mid" },
+            { name: "Yasuo", jpName: "ヤスオ", role: "Mid" },
+            { name: "Yone", jpName: "ヨネ", role: "Mid" },
+            { name: "Zed", jpName: "ゼド", role: "Mid" },
+            { name: "Ziggs", jpName: "ジグス", role: "Mid" },
+            { name: "Zoe", jpName: "ゾーイ", role: "Mid" },
+            
+            // Bot Lane (ADC)
+            { name: "Aphelios", jpName: "アフェリオス", role: "Bot" },
+            { name: "Ashe", jpName: "アッシュ", role: "Bot" },
+            { name: "Caitlyn", jpName: "ケイトリン", role: "Bot" },
+            { name: "Draven", jpName: "ドレイヴン", role: "Bot" },
+            { name: "Ezreal", jpName: "エズリアル", role: "Bot" },
+            { name: "Jhin", jpName: "ジン", role: "Bot" },
+            { name: "Jinx", jpName: "ジンクス", role: "Bot" },
+            { name: "Kai'Sa", jpName: "カイ＝サ", role: "Bot" },
+            { name: "Kalista", jpName: "カリスト", role: "Bot" },
+            { name: "Kog'Maw", jpName: "コグ＝マウ", role: "Bot" },
+            { name: "Lucian", jpName: "ルシアン", role: "Bot" },
+            { name: "Miss Fortune", jpName: "ミス・フォーチュン", role: "Bot" },
+            { name: "Nilah", jpName: "ニーラ", role: "Bot" },
+            { name: "Samira", jpName: "サミラ", role: "Bot" },
+            { name: "Senna", jpName: "セナ", role: "Bot" },
+            { name: "Sivir", jpName: "シヴィア", role: "Bot" },
+            { name: "Smolder", jpName: "スモルダー", role: "Bot" },
+            { name: "Tristana", jpName: "トリスターナ", role: "Bot" },
+            { name: "Varus", jpName: "ヴァルス", role: "Bot" },
+            { name: "Xayah", jpName: "ザヤ", role: "Bot" },
+            { name: "Zeri", jpName: "ゼリ", role: "Bot" },
+            
+            // Support
+            { name: "Alistar", jpName: "アリスター", role: "Support" },
+            { name: "Bard", jpName: "バード", role: "Support" },
+            { name: "Blitzcrank", jpName: "ブリッツクランク", role: "Support" },
+            { name: "Braum", jpName: "ブラウム", role: "Support" },
+            { name: "Janna", jpName: "ジャンナ", role: "Support" },
+            { name: "Karma", jpName: "カルマ", role: "Support" },
+            { name: "Leona", jpName: "レオナ", role: "Support" },
+            { name: "Lulu", jpName: "ルル", role: "Support" },
+            { name: "Milio", jpName: "ミリオ", role: "Support" },
+            { name: "Morgana", jpName: "モルガナ", role: "Support" },
+            { name: "Nami", jpName: "ナミ", role: "Support" },
+            { name: "Nautilus", jpName: "ノーチラス", role: "Support" },
+            { name: "Pyke", jpName: "パイク", role: "Support" },
+            { name: "Rakan", jpName: "ラカン", role: "Support" },
+            { name: "Renata Glasc", jpName: "レナータ・グラスク", role: "Support" },
+            { name: "Sona", jpName: "ソナ", role: "Support" },
+            { name: "Soraka", jpName: "ソラカ", role: "Support" },
+            { name: "Swain", jpName: "スウェイン", role: "Support" },
+            { name: "Taric", jpName: "タリック", role: "Support" },
+            { name: "Thresh", jpName: "スレッシュ", role: "Support" },
+            { name: "Yuumi", jpName: "ユーミ", role: "Support" },
+            { name: "Zilean", jpName: "ジリアン", role: "Support" },
+            { name: "Zyra", jpName: "ザイラ", role: "Support" },
+            // 最新チャンピオン（ユナラを例として追加）
+            { name: "Yunara", jpName: "ユナラ", role: "Support" },
+            // 欠けている可能性があるチャンピオンを追加
+            { name: "Hwei", jpName: "フェイ", role: "Mid" },
+            { name: "Shyvana", jpName: "シャイヴァーナ", role: "Jungle" },
+        ];
+
+        let currentFilter = 'All';
+
+        const championListDiv = document.getElementById('champion-list');
+        const detailPanel = document.getElementById('detail-panel');
+        const loadingIndicator = document.getElementById('loading-indicator');
+
+        // --- Utility Functions for Firebase/Auth (Mandatory) ---
+
+        // Exponential Backoff Fetcher
+        async function exponentialBackoffFetch(url, options, retries = 5, delay = 1000) {
+            for (let i = 0; i < retries; i++) {
+                try {
+                    const response = await fetch(url, options);
+                    if (response.ok) {
+                        return response;
+                    } else if (response.status === 429 && i < retries - 1) { // Too Many Requests
+                        console.warn(`Rate limit hit. Retrying in ${delay / 1000}s...`);
+                        await new Promise(resolve => setTimeout(resolve, delay));
+                        delay *= 2; // Exponential backoff
+                        continue;
+                    } else {
+                        // 400 Bad Request, 500 Server Error, 403 Forbidden etc.
+                        const errorBody = await response.text();
+                        console.error(`Fetch failed with status ${response.status}. Response body: ${errorBody}`);
+                        throw new Error(`HTTP error! status: ${response.status} - ${response.statusText}`);
+                    }
+                } catch (error) {
+                    if (i < retries - 1) {
+                        console.error(`Fetch attempt ${i + 1} failed. Retrying in ${delay / 1000}s...`, error);
+                        await new Promise(resolve => setTimeout(resolve, delay));
+                        delay *= 2;
+                        continue;
+                    } else {
+                        throw new Error(`Fetch failed after ${retries} attempts: ${error.message}`);
+                    }
+                }
+            }
+        }
+
+        // --- Core Application Logic ---
+
+        function getChampionCounts() {
+            const counts = { All: allChampions.length };
+            const roles = ['Top', 'Jungle', 'Mid', 'Bot', 'Support'];
+            roles.forEach(role => {
+                counts[role] = allChampions.filter(c => c.role === role).length;
+            });
+            return counts;
+        }
+
+        function renderChampionList() {
+            championListDiv.innerHTML = '';
+
+            const filteredChampions = currentFilter === 'All'
+                ? allChampions
+                : allChampions.filter(c => c.role === currentFilter);
+            
+            // レーンボタンのテキストを更新
+            const counts = getChampionCounts();
+            document.getElementById('btn-All').textContent = `全て (${counts.All})`;
+            document.getElementById('btn-Top').textContent = `Top (${counts.Top})`;
+            document.getElementById('btn-Jungle').textContent = `Jungle (${counts.Jungle})`;
+            document.getElementById('btn-Mid').textContent = `Mid (${counts.Mid})`;
+            document.getElementById('btn-Bot').textContent = `Bot (ADC) (${counts.Bot})`;
+            document.getElementById('btn-Support').textContent = `Support (${counts.Support})`;
+
+
+            if (filteredChampions.length === 0) {
+                championListDiv.innerHTML = '<p class="text-center text-gray-500 p-4">このレーンにはチャンピオンがいません。</p>';
+                return;
+            }
+
+            filteredChampions.sort((a, b) => a.jpName.localeCompare(b.jpName, 'ja')); // 日本語名でソート
+
+            filteredChampions.forEach(champ => {
+                const button = document.createElement('button');
+                button.className = 'w-full py-2 px-4 text-left text-sm font-semibold text-gray-700 bg-white hover:bg-red-50 transition duration-150 ease-in-out rounded-lg shadow-sm border border-gray-100';
+                button.innerHTML = `
+                    <div class="flex items-center justify-between">
+                        <span>${champ.jpName} (${champ.role})</span>
+                        <span class="text-xs text-red-500">対策を見る &rarr;</span>
+                    </div>
+                `;
+                button.onclick = () => fetchCounterStrategy(champ);
+                championListDiv.appendChild(button);
+            });
+        }
+
+        function filterChampions(role) {
+            currentFilter = role;
+            document.querySelectorAll('.lane-button').forEach(btn => {
+                btn.classList.remove('active', 'bg-red-600', 'text-white', 'shadow-lg');
+                btn.classList.add('bg-red-100', 'text-red-800', 'hover:bg-red-200');
+            });
+            document.getElementById(`btn-${role}`).classList.add('active', 'bg-red-600', 'text-white', 'shadow-lg');
+            document.getElementById(`btn-${role}`).classList.remove('bg-red-100', 'text-red-800', 'hover:bg-red-200');
+
+            renderChampionList();
+            detailPanel.innerHTML = '<div class="text-center text-gray-400 p-6">左のリストからチャンピオンを選択して対策を検索してください。</div>';
+        }
+
+        // Fetch counter strategy using Gemini API
+        async function fetchCounterStrategy(champion) {
+            detailPanel.innerHTML = '';
+            loadingIndicator.classList.remove('hidden');
+
+            const championJpName = champion.jpName;
+            const championRole = champion.role;
+
+            // System Instruction: 箇条書きを強く要求し、最新のアイテムのみに言及するよう指示を強化
+            const systemPrompt = `あなたはプロのLeague of Legendsアナリストであり、プレイヤーに優しく教える家庭教師のような存在です。指定されたチャンピオンに対する対策を、丁寧で具体的、かつ簡潔な**箇条書き**の文章で提供してください。**現在ゲームに存在しない古いアイテム名は絶対に避けてください。**出力は必ずJSON形式で、日本語で行ってください。必ず以下の4つのキーを含めてください: champion_name (対策対象のチャンピオン名), key_items (必須アイテムまたは推奨アイテム。具体的なアイテム名（例: ゾーニャの砂時計、リーライ・クリスタルセプター）を**箇条書きリスト**で列挙し、その理由も簡潔に述べる), playstyle_summary (レーン戦と集団戦の双方における具体的な戦い方の要点。**箇条書きリスト**で見やすく記載する), counter_picks (このチャンピオンに特に強く、効果的なカウンターチャンピオンを3体以上、日本語名で列挙する)。`;
+
+            // User Query (in Japanese for focus)
+            const userQuery = `${championJpName}（${championRole}レーン）に対する最新の対策（必須アイテム、戦い方の要点、最も効果的なカウンターチャンピオン）を教えてください。`;
+
+            // Define the JSON structure for the response
+            const responseSchema = {
+                type: "OBJECT",
+                properties: {
+                    "champion_name": { "type": "STRING", "description": "対策対象のチャンピオン名（日本語）" },
+                    "key_items": { "type": "STRING", "description": "必須アイテムまたは推奨アイテムと簡単な理由を箇条書きリストで" },
+                    "playstyle_summary": { "type": "STRING", "description": "戦い方の要点（レーン戦と集団戦）を箇条書きリストで" },
+                    "counter_picks": { "type": "STRING", "description": "このチャンピオンに強く、対策となるチャンピオンを3体以上、列挙する" }
+                },
+                required: ["champion_name", "key_items", "playstyle_summary", "counter_picks"],
+                propertyOrdering: ["champion_name", "key_items", "playstyle_summary", "counter_picks"]
+            };
+
+            const apiKey = ""; // Canvas will provide API key if needed
+            
+            // 403/401エラー回避のため、クリーンなURLを使用 (環境に認証を委ねる)
+            const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`;
+
+            try {
+                const response = await exponentialBackoffFetch(apiUrl, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        contents: [{ parts: [{ text: userQuery }] }],
+                        systemInstruction: { parts: [{ text: systemPrompt }] },
+                        generationConfig: {
+                            responseMimeType: "application/json",
+                            responseSchema: responseSchema
+                        }
+                    })
+                });
+
+                const result = await response.json();
+                const candidate = result.candidates?.[0];
+
+                if (candidate && candidate.content?.parts?.[0]?.text) {
+                    const jsonString = candidate.content.parts[0].text;
+                    let strategy;
+                    try {
+                        strategy = JSON.parse(jsonString);
+                    } catch (e) {
+                        console.error("Failed to parse JSON response:", e);
+                        displayError('対策情報の形式が不正です。AIの応答内容を確認できませんでした。');
+                        return;
+                    }
+
+                    displayStrategy(strategy, []);
+
+                } else {
+                    displayError('AIからの応答がありませんでした。モデルのガードレールに引っかかった可能性があります。');
+                }
+            } catch (error) {
+                console.error("API Fetch Error:", error);
+                displayError(`対策の取得中に致命的なエラーが発生しました: ${error.message}。`);
+            } finally {
+                loadingIndicator.classList.add('hidden');
+            }
+        }
+
+        // 対策情報をHTMLでレンダリングする関数
+        function displayStrategy(strategy, sources) {
+            const champion = strategy.champion_name || "不明なチャンピオン";
+            
+            // アイテムセクション (黄色) - 箇条書きを適切に表示するため、<div class="strategy-content">でラップ
+            const itemSection = strategy.key_items
+                ? `<div class="strategy-section bg-yellow-50 border-2 border-yellow-200">
+                    <h3 class="section-title text-yellow-800 border-yellow-300">必須/推奨アイテム</h3>
+                    <div class="strategy-content text-gray-700 whitespace-pre-wrap">${strategy.key_items}</div>
+                   </div>`
+                : '<p class="text-gray-500">必須アイテム情報が見つかりませんでした。</p>';
+
+            // 戦い方の要点セクション (青色) - 箇条書きを適切に表示するため、<div class="strategy-content">でラップ
+            const summarySection = strategy.playstyle_summary
+                ? `<div class="strategy-section bg-blue-50 border-2 border-blue-200">
+                    <h3 class="section-title text-blue-800 border-blue-300">戦い方の要点 (レーン戦・集団戦)</h3>
+                    <div class="strategy-content text-gray-700 whitespace-pre-wrap">${strategy.playstyle_summary}</div>
+                   </div>`
+                : '<p class="text-gray-500">戦い方の要点情報が見つかりませんでした。</p>';
+            
+            // カウンターピックセクション (緑色) - 箇条書きを適切に表示するため、<div class="strategy-content">でラップ
+            const counterSection = strategy.counter_picks
+                ? `<div class="strategy-section bg-green-50 border-2 border-green-200">
+                    <h3 class="section-title text-green-800 border-green-300">カウンターピック (このチャンピオンに強い)</h3>
+                    <div class="strategy-content text-gray-700 whitespace-pre-wrap">${strategy.counter_picks}</div>
+                   </div>`
+                : '<p class="text-gray-500">推奨カウンターチャンピオン情報が見つかりませんでした。</p>';
+
+            // 導入文を削除し、タイトルとセクションのみを表示
+            detailPanel.innerHTML = `
+                <div class="space-y-6">
+                    <h2 class="text-4xl font-extrabold text-red-700 border-b-4 border-red-300 pb-3">${champion}への対策</h2>
+                    ${itemSection}
+                    ${summarySection}
+                    ${counterSection}
+                </div>
+            `;
+        }
+
+        function displayError(message) {
+            detailPanel.innerHTML = `
+                <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative" role="alert">
+                    <strong class="font-bold">エラー: </strong>
+                    <span class="block sm:inline">${message}</span>
+                </div>
+            `;
+        }
+
+
+        // --- Initialization and Event Listeners ---
+        window.onload = async function() {
+            try {
+                // Initialize Firebase (Mandatory)
+                const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {};
+                const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
+                const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+
+                if (Object.keys(firebaseConfig).length > 0) {
+                    setLogLevel('Debug');
+                    app = initializeApp(firebaseConfig);
+                    db = getFirestore(app);
+                    auth = getAuth(app);
+
+                    // Sign-in logic (Mandatory)
+                    if (initialAuthToken) {
+                        await signInWithCustomToken(auth, initialAuthToken);
+                    } else {
+                        await signInAnonymously(auth);
+                    }
+
+                    onAuthStateChanged(auth, (user) => {
+                        if (user) {
+                            userId = user.uid;
+                        } else {
+                            userId = 'anonymous';
+                        }
+                    });
+                } else {
+                    console.warn("Firebase config is missing. Firestore operations will not run.");
+                }
+
+                // Initial rendering
+                document.getElementById('btn-All').classList.add('active', 'bg-red-600', 'text-white', 'shadow-lg');
+                document.getElementById('btn-All').classList.remove('bg-red-100', 'text-red-800', 'hover:bg-red-200');
+                renderChampionList();
+
+                // Assign event listeners to lane buttons
+                document.querySelectorAll('.lane-button').forEach(button => {
+                    button.addEventListener('click', () => filterChampions(button.dataset.role));
+                });
+            } catch (e) {
+                console.error("Initialization failed:", e);
+            }
+        };
+
+        // Expose filterChampions globally for button clicks
+        window.filterChampions = filterChampions;
+
+    </script>
+</head>
+<body class="bg-gray-50 t    ext-gray-800">
+
+    <div class="max-w-7xl mx-auto py-8 px-4 sm:px-6 lg:px-8">
+        <header class="text-center mb-10">
+            <h1 class="text-5xl font-extrabold text-red-700">LoL チャンピオン対策データベース</h1>
+            <p class="mt-3 text-xl text-gray-600">チャンピオンを選ぶと、AIの知識を基に対策が動的に生成されます。</p>
+        </header>
+
+        <main class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+            <!-- Left Panel: Filter and Champion List -->
+            <div class="lg:col-span-1 bg-white p-6 rounded-xl shadow-2xl border border-gray-100">
+                <h2 class="text-2xl font-bold text-red-600 mb-4 border-b pb-2">レーンを選択</h2>
+
+                <!-- Lane Filters -->
+                <div class="grid grid-cols-3 sm:grid-cols-6 lg:grid-cols-2 xl:grid-cols-3 gap-2 mb-6">
+                    <button id="btn-All" data-role="All" class="lane-button bg-red-100 text-red-800 py-2 rounded-lg font-medium transition hover:bg-red-200">全て</button>
+                    <button id="btn-Top" data-role="Top" class="lane-button bg-red-100 text-red-800 py-2 rounded-lg font-medium transition hover:bg-red-200">Top</button>
+                    <button id="btn-Jungle" data-role="Jungle" class="lane-button bg-red-100 text-red-800 py-2 rounded-lg font-medium transition hover:bg-red-200">Jungle</button>
+                    <button id="btn-Mid" data-role="Mid" class="lane-button bg-red-100 text-red-800 py-2 rounded-lg font-medium transition hover:bg-red-200">Mid</button>
+                    <button id="btn-Bot" data-role="Bot" class="lane-button bg-red-100 text-red-800 py-2 rounded-lg font-medium transition hover:bg-red-200">Bot (ADC)</button>
+                    <button id="btn-Support" data-role="Support" class="lane-button bg-red-100 text-red-800 py-2 rounded-lg font-medium transition hover:bg-red-200">Support</button>
+                </div>
+
+                <h2 class="text-2xl font-bold text-red-600 mb-4 border-b pb-2">チャンピオン一覧</h2>
+
+                <!-- Champion List -->
+                <div id="champion-list" class="space-y-2 max-h-[60vh] overflow-y-auto pr-2">
+                    <!-- Champion buttons will be rendered here by JavaScript -->
+                </div>
+            </div>
+
+            <!-- Right Panel: Strategy Details -->
+            <div class="lg:col-span-2 bg-white p-8 rounded-xl shadow-2xl border border-gray-100 relative min-h-[500px]">
+                <div id="detail-panel">
+                    <div class="text-center text-gray-400 p-6">左のリストからチャンピオンを選択して対策を検索してください。</div>
+                </div>
+
+                <!-- Loading Indicator -->
+                <div id="loading-indicator" class="hidden absolute inset-0 bg-white/80 flex items-center justify-center rounded-xl transition duration-300">
+                    <div class="flex flex-col items-center">
+                        <svg class="animate-spin -ml-1 mr-3 h-8 w-8 text-red-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                        </svg>
+                        <p class="mt-3 text-red-600 font-semibold">対策情報を生成中...</p>
+                        <p class="text-sm text-gray-500">AIの組み込み知識から回答を作成しています</p>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+</body>
+</html>
